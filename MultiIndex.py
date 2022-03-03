@@ -10,7 +10,7 @@ class MultiIndex:
 
     def get_index(self, indices: tuple):
         index = indices[0]
-        factor = self.limits[0]
+        factor = self.limits[0]          
         for i in range(1, len(indices)):
             index += indices[i] * factor
             factor *= self.limits[i]
@@ -52,24 +52,29 @@ class MultiIndex:
 
 
 def main():
-    limits = (3, 3, 3)
-    array = np.zeros(limits)
+    limits = (3, 3, 3, 3)
     converter = MultiIndex(limits)
+    print(converter(0))
+    print(converter(1))
+    print(converter(2))
+    print(converter(3))
 
-    for i in range(converter.length):
-        array[converter.get_indices(i)] = i
-
-    print(array)
-    print(converter.flatten_array(array))
-    print(converter.unflatten_list(converter.flatten_array(array)))
-
-    for i in converter:
-        print(i)
-
-    print(converter((2, 2, 2)))
-    print(converter(5))
-    print(converter(-1))
-    print(converter(-len(converter)))
+# array = np.zeros(limits)
+    #
+    # for i in range(converter.length):
+    #     array[converter.get_indices(i)] = i
+    #
+    # print(array)
+    # print(converter.flatten_array(array))
+    # print(converter.unflatten_list(converter.flatten_array(array)))
+    #
+    # for i in converter:
+    #     print(i)
+    #
+    # print(converter((2, 2, 2)))
+    # print(converter(5))
+    # print(converter(-1))
+    # print(converter(-len(converter)))
 
 
 if __name__ == '__main__':

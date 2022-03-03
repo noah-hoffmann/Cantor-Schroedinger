@@ -1,5 +1,7 @@
 import numpy as np
 from MultiIndex import MultiIndex
+from SymmetricIndex import SymmetricIndex
+from AntiSymmetricIndex import AntiSymmetricIndex
 from CantorSet import CantorSet
 import scipy.sparse
 import scipy.sparse.linalg
@@ -7,7 +9,7 @@ import scipy.sparse.linalg
 
 class Solver:
     def __init__(self, depth: int, repulsion_strength: float = 10, excited_states: int = 10,
-                 interaction: str = 'harmonic', electric_field: float = .1, particle='fermion'):
+                 interaction: str = 'harmonic', electric_field: float = .1, symmetry=None):
         # recursion depth of the cantor set
         self.depth = depth
         # number of excited states of square well to consider
@@ -19,28 +21,62 @@ class Solver:
         self.electric_field = electric_field
         # edges of the cantor set
         self.edges = CantorSet(depth)
-        # limits for the indices
-        self.limits = (len(self.edges), len(self.edges), excited_states, excited_states)
-        indices = MultiIndex(self.limits)
-        self.indices = indices
-        # init hamiltonian matrix
-        self.hamiltonian = scipy.sparse.lil_matrix((len(indices), len(indices)))
-        for I in range(len(indices)):
-            # iteration over all indices takes too long for large matrices
-            # iterations is only needed over states where wave functions of the same variable are in the same well
-            i, j, n1, m1 = indices(I)
-            for n2 in range(excited_states):
-                for m2 in range(excited_states):
-                    J = indices((i, j, n2, m2))
-                    # calculation of the interaction integral
-                    self.hamiltonian[I, J] = self.interaction_integral((i, j, n1, m1), (i, j, n2, m2),
-                                                                       interaction=interaction)
-                    # add unperturbed energies in the diagonal terms (I = J)
-                    if m1 == m2 and n1 == n2:
-                        self.hamiltonian[I, J] += self.unperturbed_energy(n1) + self.unperturbed_energy(m2)
-                    if particle == 'fermion':
-                        self.hamiltonian[I, J] -= self.interaction_integral((i, j, n1, m1), (i, j, m2, n2))
-                        if n1 == m2 and m1 == n2:
+        if symmetry is None:
+            # limits for the indices
+            self.limits = (len(self.edges), len(self.edges), excited_states, excited_states)
+            indices = MultiIndex(self.limits)
+            self.indices = indices
+            # init hamiltonian matrix
+            self.hamiltonian = scipy.sparse.lil_matrix((len(indices), len(indices)))
+            for I in range(len(indices)):
+                # iteration over all indices takes too long for large matrices
+                # iterations is only needed over states where wave functions of the same variable are in the same well
+                i, j, n1, m1 = indices(I)
+                for n2 in range(excited_states):
+                    for m2 in range(excited_states):
+                        J = indices((i, j, n2, m2))
+                        # calculation of the interaction integral
+                        self.hamiltonian[I, J] = self.interaction_integral((i, j, n1, m1), (i, j, n2, m2),
+                                                                           interaction=interaction)
+                        # add unperturbed energies in the diagonal terms (I = J)
+                        if m1 == m2 and n1 == n2:
+                            self.hamiltonian[I, J] += self.unperturbed_energy(n1) + self.unperturbed_energy(m1)
+                        # if particle == 'fermion':
+                        #     self.hamiltonian[I, J] -= self.interaction_integral((i, j, n1, m1), (i, j, m2, n2))
+                        #     if n1 == m2 and m1 == n2:
+                        #         self.hamiltonian[I, J] -= self.unperturbed_energy(n1) + self.unperturbed_energy(n2)
+        # TODO: this case needs to incorporate the cases where (i, n1) = (i, m1) or (i, n2) = (j, m2)
+        if symmetry == 'symmetric':
+            particle_index = MultiIndex((len(self.edges), excited_states))
+            combined_index = SymmetricIndex(len(particle_index))
+            self.hamiltonian = scipy.sparse.lil_matrix((len(combined_index), len(combined_index)))
+            for I, (a, b) in combined_index:
+                i, n1 = particle_index(a)
+                j, m1 = particle_index(b)
+                for n2 in range(excited_states):
+                    for m2 in range(excited_states):
+                        J = combined_index(particle_index((i, n2)), particle_index((j, m2)))
+                        self.hamiltonian[I, J] = self.interaction_integral((i, j, n1, m1), (i, j, n2, m2))
+                        if I == J:
+                            self.hamiltonian[I, J] += self.unperturbed_energy(n1) + self.unperturbed_energy(m2)
+                        self.hamiltonian[I, J] += self.interaction_integral((i, j, n1, m1), (j, i, m2, n2))
+                        if n1 == m2 and m1 == n2 and i == j:
+                            self.hamiltonian[I, J] += self.unperturbed_energy(n1) + self.unperturbed_energy(n2)
+        if symmetry == 'antisymmetric':
+            particle_index = MultiIndex((len(self.edges), excited_states))
+            combined_index = AntiSymmetricIndex(len(particle_index))
+            self.hamiltonian = scipy.sparse.lil_matrix((len(combined_index), len(combined_index)))
+            for I, (a, b) in combined_index:
+                i, n1 = particle_index(a)
+                j, m1 = particle_index(b)
+                for n2 in range(excited_states):
+                    for m2 in range(excited_states):
+                        J = combined_index(particle_index((i, n2)), particle_index((j, m2)))
+                        self.hamiltonian[I, J] = self.interaction_integral((i, j, n1, m1), (i, j, n2, m2))
+                        if I == J:
+                            self.hamiltonian[I, J] += self.unperturbed_energy(n1) + self.unperturbed_energy(m2)
+                        self.hamiltonian[I, J] -= self.interaction_integral((i, j, n1, m1), (j, i, m2, n2))
+                        if n1 == m2 and m1 == n2 and i == j:
                             self.hamiltonian[I, J] -= self.unperturbed_energy(n1) + self.unperturbed_energy(n2)
             # print(f'{(I + 1) * len(indices) / len(indices) ** 2 * 100:.2f}% done!')
         # print('Init done!')
@@ -109,7 +145,7 @@ class Solver:
                 # return V * (i - j) ** 2 + V * self.length ** 2 / 6 * (
                 #         1 - 3 / (m1 ** 2 * np.pi ** 2) - 3 / (n1 ** 2 * np.pi ** 2))
                 return E * (i + j + L) + V / 6 * (
-                            6 * (i - j) ** 2 + L ** 2 - 3 * L ** 2 * (k ** 2 + n ** 2) / (k ** 2 * n ** 2 * np.pi ** 2))
+                        6 * (i - j) ** 2 + L ** 2 - 3 * L ** 2 * (k ** 2 + n ** 2) / (k ** 2 * n ** 2 * np.pi ** 2))
         else:
             raise ValueError(f'{interaction=} not supported')
 
@@ -163,7 +199,7 @@ def main():
     groundstates = []
     for depth in trange(max_depth):
         if not load:
-            solver = Solver(depth, interaction='harmonic', electric_field=1.0, particle='fermion')
+            solver = Solver(depth, interaction='harmonic', electric_field=1.0)
             energys, states = solver.get_eigenvalues()
             np.save(f'energy{depth}', energys)
             np.savetxt(f'energy{depth}.txt', energys)
