@@ -21,7 +21,7 @@ class AntiSymmetricIndex:
 
     def __iter__(self):
         for i in range(self.length):
-            yield self.get_indices(i)
+            yield i, self.get_indices(i)
 
     def __call__(self, *args):
         if len(args) == 1:
