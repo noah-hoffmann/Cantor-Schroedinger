@@ -45,7 +45,6 @@ class Solver:
                         #     self.hamiltonian[I, J] -= self.interaction_integral((i, j, n1, m1), (i, j, m2, n2))
                         #     if n1 == m2 and m1 == n2:
                         #         self.hamiltonian[I, J] -= self.unperturbed_energy(n1) + self.unperturbed_energy(n2)
-        # TODO: this case needs to incorporate the cases where (i, n1) = (i, m1) or (i, n2) = (j, m2)
         if symmetry == 'symmetric':
             particle_index = MultiIndex((len(self.edges), excited_states))
             combined_index = SymmetricIndex(len(particle_index))
@@ -62,6 +61,11 @@ class Solver:
                         self.hamiltonian[I, J] += self.interaction_integral((i, j, n1, m1), (j, i, m2, n2))
                         if n1 == m2 and m1 == n2 and i == j:
                             self.hamiltonian[I, J] += self.unperturbed_energy(n1) + self.unperturbed_energy(n2)
+                        # handle the cases of same state as, |a,b> = (|a>|b>+|b>|a>)/sqrt(2), but |a,a>=|a>|a>
+                        if a == b:
+                            self.hamiltonian /= np.sqrt(2)
+                        if (i, n2) == (j, m2):
+                            self.hamiltonian /= np.sqrt(2)
         if symmetry == 'antisymmetric':
             particle_index = MultiIndex((len(self.edges), excited_states))
             combined_index = AntiSymmetricIndex(len(particle_index))
@@ -150,7 +154,7 @@ class Solver:
             raise ValueError(f'{interaction=} not supported')
 
     def get_eigenvalues(self):
-        return scipy.sparse.linalg.eigsh(self.hamiltonian, min(len(self.indices) - 1, 1000), which='SM')
+        return scipy.sparse.linalg.eigsh(self.hamiltonian, min(len(self.hamiltonian.rows) - 1, 1000), which='SM')
 
     def get_well_function(self, i, n, samples: int = 200):
         def f(arr):
@@ -199,14 +203,14 @@ def main():
     groundstates = []
     for depth in trange(max_depth):
         if not load:
-            solver = Solver(depth, interaction='harmonic', electric_field=1.0)
+            solver = Solver(depth, interaction='harmonic', electric_field=1.0, symmetry='symmetric')
             energys, states = solver.get_eigenvalues()
             np.save(f'energy{depth}', energys)
             np.savetxt(f'energy{depth}.txt', energys)
             # for plotting
             groundstate = states[:, 0]
             np.save(f'groundstate{depth}', groundstate)
-            indices = solver.indices
+            # indices = solver.indices
             # particle1 = np.zeros(samples)
             # particle2 = np.zeros(samples)
             # for I in range(len(groundstate)):
